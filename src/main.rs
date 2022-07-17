@@ -5,4 +5,7 @@ fn main() {
     let mut app = Application::new();
 
     app.add_layer(Box::new(EditorLayer::new()));
+
+    app.run();
+    app.shutdown();
 }
