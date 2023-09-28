@@ -25,19 +25,7 @@ pub fn run() {
     let extension_name_pointers: Vec<*const i8> =
         vec![ash::extensions::ext::DebugUtils::name().as_ptr()];
 
-    let instance_create_info = vk::InstanceCreateInfo::builder()
-        .application_info(&app_info)
-        .enabled_extension_names(&layer_name_pointers)
-        .enabled_extension_names(&extension_name_pointers);
-
-    let instance: ash::Instance = unsafe {
-        entry
-            .create_instance(&instance_create_info, None)
-            .expect("Instance creation error")
-    };
-
-    let debug_utils = ash::extensions::ext::DebugUtils::new(&entry, &instance);
-    let debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
+    let mut debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
         message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
             | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
             | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
@@ -48,6 +36,20 @@ pub fn run() {
         pfn_user_callback: Some(vulkan_debug_callback),
         ..Default::default()
     };
+
+    let instance_create_info = vk::InstanceCreateInfo::builder()
+        .push_next(&mut debug_create_info)
+        .application_info(&app_info)
+        .enabled_layer_names(&layer_name_pointers)
+        .enabled_extension_names(&extension_name_pointers);
+
+    let instance: ash::Instance = unsafe {
+        entry
+            .create_instance(&instance_create_info, None)
+            .expect("Instance creation error")
+    };
+
+    let debug_utils = ash::extensions::ext::DebugUtils::new(&entry, &instance);
 
     let utils_messenger = unsafe {
         debug_utils
