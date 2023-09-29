@@ -3,8 +3,10 @@ use std::ffi::CString;
 use ash::vk;
 
 pub fn run() {
+    // Vulkan lib integration.
     let entry: ash::Entry = ash::Entry::linked();
 
+    // Engine details
     let engine_name = CString::new("Spyder").unwrap();
     let app_name = CString::new("Example").unwrap();
 
@@ -15,6 +17,7 @@ pub fn run() {
         .application_version(vk::make_api_version(0, 0, 1, 0))
         .api_version(vk::API_VERSION_1_3);
 
+    // Layers, TODO: setup system to allow different plugins to request layers and extentions.
     let layer_names: Vec<CString> = vec![CString::new("VK_LAYER_KHRONOS_validation").unwrap()];
 
     let layer_name_pointers: Vec<*const i8> = layer_names
@@ -25,6 +28,7 @@ pub fn run() {
     let extension_name_pointers: Vec<*const i8> =
         vec![ash::extensions::ext::DebugUtils::name().as_ptr()];
 
+    // Debug info
     let mut debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
         message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
             | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
@@ -37,6 +41,7 @@ pub fn run() {
         ..Default::default()
     };
 
+    //  Finally initialize the instance
     let instance_create_info = vk::InstanceCreateInfo::builder()
         .push_next(&mut debug_create_info)
         .application_info(&app_info)
@@ -57,6 +62,58 @@ pub fn run() {
             .expect("Failed to initialize debug messenger")
     };
 
+    // Device
+    let physical_devices = unsafe {
+        instance
+            .enumerate_physical_devices()
+            .expect("Failed to get devices")
+    };
+
+    for physical_device in &physical_devices {
+        let props = unsafe { instance.get_physical_device_properties(*physical_device) };
+        dbg!(props);
+    }
+
+    let (physical_device, _) = physical_devices
+        .iter()
+        .find_map(|physical_device| {
+            let properties = unsafe { instance.get_physical_device_properties(*physical_device) };
+            if properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
+                Some((*physical_device, properties))
+            } else {
+                None
+            }
+        })
+        .expect("No discrete GPU found");
+
+    let queue_family_properties =
+        unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
+    dbg!(&queue_family_properties);
+
+    let queue_family_indices = {
+        let mut found_graphics_q_index = None;
+        let mut found_transfer_q_index = None;
+        for (index, queue_family) in queue_family_properties.iter().enumerate() {
+            if queue_family.queue_count > 0
+                && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+            {
+                found_graphics_q_index = Some(index as u32);
+            }
+            if queue_family.queue_count > 0
+                && queue_family.queue_flags.contains(vk::QueueFlags::TRANSFER)
+                && (found_transfer_q_index.is_none()
+                    || !queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS))
+            {
+                found_transfer_q_index = Some(index as u32);
+            }
+        }
+        (
+            found_graphics_q_index.unwrap(),
+            found_transfer_q_index.unwrap(),
+        )
+    };
+
+    // Clean up. prob implement drop method where possible.
     unsafe {
         debug_utils.destroy_debug_utils_messenger(utils_messenger, None);
         instance.destroy_instance(None)
