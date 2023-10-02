@@ -2,6 +2,7 @@ use std::ffi::CString;
 
 use ash::vk;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+use winit::event::{Event, WindowEvent};
 
 pub fn run() {
     // Windowing
@@ -11,6 +12,23 @@ pub fn run() {
         .unwrap();
 
     let spyder = Spyder::new(window);
+
+    event_loop.run(move |event, _, controlflow| match event {
+        Event::WindowEvent {
+            event: WindowEvent::CloseRequested,
+            ..
+        } => {
+            *controlflow = winit::event_loop::ControlFlow::Exit;
+        }
+        Event::MainEventsCleared => {
+            // doing the work here (later)
+            spyder.window.request_redraw();
+        }
+        Event::RedrawRequested(_) => {
+            //render here (later)
+        }
+        _ => {}
+    });
 }
 
 struct Spyder {
@@ -25,6 +43,7 @@ struct Spyder {
     queues: Queues,
     logical_device: ash::Device,
     swap_chain: SwapChain,
+    render_pass: vk::RenderPass,
 }
 
 impl Spyder {
@@ -50,7 +69,7 @@ impl Spyder {
         let (logical_device, queues) =
             init_device_and_queues(&instance, physical_device, &queue_families);
 
-        let swap_chain = SwapChain::new(
+        let mut swap_chain = SwapChain::new(
             &instance,
             physical_device,
             &logical_device,
@@ -58,6 +77,9 @@ impl Spyder {
             &queue_families,
             &queues,
         );
+
+        let render_pass = init_render_pass(&logical_device, physical_device, &surface);
+        swap_chain.create_frame_buffers(&logical_device, render_pass);
 
         Self {
             window,
@@ -71,6 +93,7 @@ impl Spyder {
             queues,
             logical_device,
             swap_chain,
+            render_pass,
         }
     }
 }
@@ -78,6 +101,8 @@ impl Spyder {
 impl Drop for Spyder {
     fn drop(&mut self) {
         unsafe {
+            self.logical_device
+                .destroy_render_pass(self.render_pass, None);
             self.swap_chain.cleanup(&self.logical_device);
             self.logical_device.destroy_device(None);
 
@@ -212,6 +237,53 @@ fn init_device_and_queues(
             transfer_queue,
         },
     )
+}
+
+fn init_render_pass(
+    logical_device: &ash::Device,
+    physical_device: vk::PhysicalDevice,
+    surface: &Surface,
+) -> vk::RenderPass {
+    let attachments = [vk::AttachmentDescription::builder()
+        .format(surface.get_formats(physical_device).first().unwrap().format)
+        .load_op(vk::AttachmentLoadOp::CLEAR)
+        .store_op(vk::AttachmentStoreOp::STORE)
+        .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+        .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+        .initial_layout(vk::ImageLayout::UNDEFINED)
+        .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+        .samples(vk::SampleCountFlags::TYPE_1)
+        .build()];
+
+    let color_attachment_references = [vk::AttachmentReference {
+        attachment: 0,
+        layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+    }];
+
+    let sub_passes = [vk::SubpassDescription::builder()
+        .color_attachments(&color_attachment_references)
+        .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+        .build()];
+
+    let sub_pass_dependencies = [vk::SubpassDependency::builder()
+        .src_subpass(vk::SUBPASS_EXTERNAL)
+        .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+        .dst_subpass(0)
+        .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+        .dst_access_mask(
+            vk::AccessFlags::COLOR_ATTACHMENT_READ | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+        )
+        .build()];
+
+    let render_pass_info = vk::RenderPassCreateInfo::builder()
+        .attachments(&attachments)
+        .subpasses(&sub_passes)
+        .dependencies(&sub_pass_dependencies);
+    unsafe {
+        logical_device
+            .create_render_pass(&render_pass_info, None)
+            .expect("Failed to create render pass")
+    }
 }
 
 struct VulkanDebug {
@@ -379,6 +451,9 @@ struct SwapChain {
     swap_chain_loader: ash::extensions::khr::Swapchain,
     images: Vec<vk::Image>,
     image_views: Vec<vk::ImageView>,
+    frame_buffers: Vec<vk::Framebuffer>,
+    surface_format: vk::SurfaceFormatKHR,
+    extent: vk::Extent2D,
 }
 
 impl SwapChain {
@@ -391,6 +466,8 @@ impl SwapChain {
         queues: &Queues,
     ) -> Self {
         let surface_capabilities = surface.get_capabilities(physical_device);
+        let extent = surface_capabilities.current_extent;
+
         let surface_present_modes = surface.get_present_modes(physical_device);
         let surface_formats = surface.get_formats(physical_device);
         let queue_families_index = [queue_families.graphics_queue_index.unwrap()];
@@ -398,14 +475,17 @@ impl SwapChain {
         dbg!(&surface_present_modes);
         dbg!(&surface_formats);
 
+        let surface_format = *surface_formats.first().unwrap();
+        dbg!(&surface_format);
+
         let swap_chain_create_info = vk::SwapchainCreateInfoKHR::builder()
             .surface(surface.surface)
             .min_image_count(
                 3.max(surface_capabilities.min_image_count)
                     .min(surface_capabilities.max_image_count),
             )
-            .image_format(surface_formats.first().unwrap().format)
-            .image_color_space(surface_formats.first().unwrap().color_space)
+            .image_format(surface_format.format)
+            .image_color_space(surface_format.color_space)
             .image_extent(surface_capabilities.current_extent)
             .image_array_layers(1)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
@@ -452,16 +532,41 @@ impl SwapChain {
             swap_chain_loader,
             images: swap_chain_images,
             image_views: swap_chain_image_views,
+            frame_buffers: Vec::new(),
+            surface_format,
+            extent,
+        }
+    }
+
+    fn create_frame_buffers(&mut self, logical_device: &ash::Device, render_pass: vk::RenderPass) {
+        let mut frame_buffers = Vec::with_capacity(self.image_views.len());
+
+        for image_view in &self.image_views {
+            let image_view = [*image_view];
+            let frame_buffer_create_info = vk::FramebufferCreateInfo::builder()
+                .render_pass(render_pass)
+                .attachments(&image_view)
+                .width(self.extent.width)
+                .height(600)
+                .layers(1);
+            let frame_buffer = unsafe {
+                logical_device
+                    .create_framebuffer(&frame_buffer_create_info, None)
+                    .expect("Failed to create frame buffer")
+            };
+            frame_buffers.push(frame_buffer);
         }
     }
 
     unsafe fn cleanup(&mut self, logical_device: &ash::Device) {
-        for image_view in &self.image_views {
-            logical_device.destroy_image_view(*image_view, None);
+        for fb in &self.frame_buffers {
+            logical_device.destroy_framebuffer(*fb, None);
         }
-
+        for iv in &self.image_views {
+            logical_device.destroy_image_view(*iv, None);
+        }
         self.swap_chain_loader
-            .destroy_swapchain(self.swap_chain, None);
+            .destroy_swapchain(self.swap_chain, None)
     }
 }
 
