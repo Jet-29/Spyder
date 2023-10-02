@@ -13,6 +13,15 @@ pub fn run() {
 
     let spyder = Spyder::new(window);
 
+    let fragment_shader_create_info = vk::ShaderModuleCreateInfo::builder()
+        .code(renderer_macros::include_glsl!("assets/shaders/tri.frag"));
+    let fragment_shader_module = unsafe {
+        spyder
+            .logical_device
+            .create_shader_module(&fragment_shader_create_info, None)
+            .unwrap()
+    };
+
     event_loop.run(move |event, _, controlflow| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,

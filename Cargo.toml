@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+renderer_macros = { path = "crates/renderer_macros" }
+
 ash = { version = "0.37.3", features = ["linked"] }
 ash-window = "0.12.0"
 winit = "0.28.7"
