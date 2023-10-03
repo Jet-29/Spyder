@@ -8,12 +8,19 @@ use syn::{parse_macro_input, Ident, LitStr, Token};
 
 #[proc_macro]
 pub fn include_glsl(glsl_options: TokenStream) -> TokenStream {
-    let Spirv { bytes } = parse_macro_input!(glsl_options);
-    quote!(&[#(#bytes),*]).into()
+    let Spirv { bytes, sources } = parse_macro_input!(glsl_options);
+    quote!(
+        {
+            #({const _FORCE_INCLUDE: &[u8] = include_bytes!(#sources);})*
+            &[#(#bytes),*]
+        }
+    )
+    .into()
 }
 
 struct Spirv {
-    pub bytes: Vec<u32>,
+    bytes: Vec<u32>,
+    sources: Vec<String>,
 }
 
 impl Parse for Spirv {
@@ -79,16 +86,19 @@ impl Parse for Spirv {
                 syn::Error::new(path_lit.span(), msg)
             })?;
 
+        drop(shaderc_options);
+
         Ok(Self {
             bytes: artifact.as_binary().to_vec(),
+            sources: sources.into_inner(),
         })
     }
 }
 
 struct CompileOptions {
-    pub kind: Option<shaderc::ShaderKind>,
-    pub definitions: Vec<(String, Option<String>)>,
-    pub optimization: shaderc::OptimizationLevel,
+    kind: Option<shaderc::ShaderKind>,
+    definitions: Vec<(String, Option<String>)>,
+    optimization: shaderc::OptimizationLevel,
 }
 
 impl Default for CompileOptions {
