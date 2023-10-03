@@ -13,15 +13,6 @@ pub fn run() {
 
     let spyder = Spyder::new(window);
 
-    let fragment_shader_create_info = vk::ShaderModuleCreateInfo::builder()
-        .code(renderer_macros::include_glsl!("assets/shaders/tri.frag"));
-    let fragment_shader_module = unsafe {
-        spyder
-            .logical_device
-            .create_shader_module(&fragment_shader_create_info, None)
-            .unwrap()
-    };
-
     event_loop.run(move |event, _, controlflow| match event {
         Event::WindowEvent {
             event: WindowEvent::CloseRequested,
@@ -53,6 +44,7 @@ struct Spyder {
     logical_device: ash::Device,
     swap_chain: SwapChain,
     render_pass: vk::RenderPass,
+    pipeline: Pipeline,
 }
 
 impl Spyder {
@@ -90,6 +82,8 @@ impl Spyder {
         let render_pass = init_render_pass(&logical_device, physical_device, &surface);
         swap_chain.create_frame_buffers(&logical_device, render_pass);
 
+        let pipeline = Pipeline::new(&logical_device, &swap_chain, &render_pass);
+
         Self {
             window,
             entry,
@@ -103,6 +97,7 @@ impl Spyder {
             logical_device,
             swap_chain,
             render_pass,
+            pipeline,
         }
     }
 }
@@ -110,6 +105,7 @@ impl Spyder {
 impl Drop for Spyder {
     fn drop(&mut self) {
         unsafe {
+            self.pipeline.cleanup(&self.logical_device);
             self.logical_device
                 .destroy_render_pass(self.render_pass, None);
             self.swap_chain.cleanup(&self.logical_device);
@@ -548,8 +544,6 @@ impl SwapChain {
     }
 
     fn create_frame_buffers(&mut self, logical_device: &ash::Device, render_pass: vk::RenderPass) {
-        let mut frame_buffers = Vec::with_capacity(self.image_views.len());
-
         for image_view in &self.image_views {
             let image_view = [*image_view];
             let frame_buffer_create_info = vk::FramebufferCreateInfo::builder()
@@ -563,11 +557,12 @@ impl SwapChain {
                     .create_framebuffer(&frame_buffer_create_info, None)
                     .expect("Failed to create frame buffer")
             };
-            frame_buffers.push(frame_buffer);
+            self.frame_buffers.push(frame_buffer);
         }
     }
 
     unsafe fn cleanup(&mut self, logical_device: &ash::Device) {
+        dbg!(&self.frame_buffers);
         for fb in &self.frame_buffers {
             logical_device.destroy_framebuffer(*fb, None);
         }
@@ -576,6 +571,144 @@ impl SwapChain {
         }
         self.swap_chain_loader
             .destroy_swapchain(self.swap_chain, None)
+    }
+}
+
+struct Pipeline {
+    pipeline: vk::Pipeline,
+    pipeline_layout: vk::PipelineLayout,
+}
+
+impl Pipeline {
+    fn new(
+        logical_device: &ash::Device,
+        swap_chain: &SwapChain,
+        render_pass: &vk::RenderPass,
+    ) -> Self {
+        let vertex_shader_create_info = vk::ShaderModuleCreateInfo::builder()
+            .code(renderer_macros::include_glsl!("assets/shaders/tri.vert"));
+
+        let fragment_shader_create_info = vk::ShaderModuleCreateInfo::builder()
+            .code(renderer_macros::include_glsl!("assets/shaders/tri.frag"));
+
+        let vertex_shader_module = unsafe {
+            logical_device
+                .create_shader_module(&vertex_shader_create_info, None)
+                .expect("Failed to create vertex shader module")
+        };
+
+        let fragment_shader_module = unsafe {
+            logical_device
+                .create_shader_module(&fragment_shader_create_info, None)
+                .expect("Failed to create fragment shader module")
+        };
+
+        let entry_point = CString::new("main").unwrap();
+        let shader_stages = [
+            vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(vertex_shader_module)
+                .name(&entry_point)
+                .build(),
+            vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(fragment_shader_module)
+                .name(&entry_point)
+                .build(),
+        ];
+
+        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder();
+        let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
+            .topology(vk::PrimitiveTopology::POINT_LIST);
+
+        let viewport = [vk::Viewport::builder()
+            .x(0.)
+            .y(0.)
+            .width(swap_chain.extent.width as f32)
+            .height(swap_chain.extent.height as f32)
+            .min_depth(0.)
+            .max_depth(1.)
+            .build()];
+
+        let scissors = [vk::Rect2D::builder()
+            .offset(vk::Offset2D::builder().x(0).y(0).build())
+            .extent(swap_chain.extent)
+            .build()];
+
+        let viewport_state_info = vk::PipelineViewportStateCreateInfo::builder()
+            .viewports(&viewport)
+            .scissors(&scissors);
+
+        let rasterizer_info = vk::PipelineRasterizationStateCreateInfo::builder()
+            .line_width(1.)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+            .cull_mode(vk::CullModeFlags::NONE)
+            .polygon_mode(vk::PolygonMode::FILL);
+
+        let multisampling_info = vk::PipelineMultisampleStateCreateInfo::builder()
+            .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+
+        let colour_blend_attachment = [vk::PipelineColorBlendAttachmentState::builder()
+            .blend_enable(true)
+            .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+            .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+            .color_blend_op(vk::BlendOp::ADD)
+            .src_alpha_blend_factor(vk::BlendFactor::SRC_ALPHA)
+            .dst_alpha_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+            .alpha_blend_op(vk::BlendOp::ADD)
+            .color_write_mask(
+                vk::ColorComponentFlags::R
+                    | vk::ColorComponentFlags::G
+                    | vk::ColorComponentFlags::B
+                    | vk::ColorComponentFlags::A,
+            )
+            .build()];
+
+        let colour_blend_create_info =
+            vk::PipelineColorBlendStateCreateInfo::builder().attachments(&colour_blend_attachment);
+
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder();
+        let pipeline_layout = unsafe {
+            logical_device
+                .create_pipeline_layout(&pipeline_layout_info, None)
+                .expect("Failed to create pipeline layout")
+        };
+
+        let pipeline_create_info = vk::GraphicsPipelineCreateInfo::builder()
+            .stages(&shader_stages)
+            .vertex_input_state(&vertex_input_info)
+            .input_assembly_state(&input_assembly_info)
+            .viewport_state(&viewport_state_info)
+            .rasterization_state(&rasterizer_info)
+            .multisample_state(&multisampling_info)
+            .color_blend_state(&colour_blend_create_info)
+            .layout(pipeline_layout)
+            .render_pass(*render_pass)
+            .subpass(0)
+            .build();
+
+        let pipeline = unsafe {
+            logical_device
+                .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_create_info], None)
+                .expect("Failed to create graphics pipeline")[0]
+        };
+
+        unsafe {
+            logical_device.destroy_shader_module(fragment_shader_module, None);
+            logical_device.destroy_shader_module(vertex_shader_module, None);
+        }
+
+        Self {
+            pipeline,
+            pipeline_layout,
+        }
+    }
+
+    fn cleanup(&self, logical_device: &ash::Device) {
+        unsafe {
+            logical_device.destroy_pipeline(self.pipeline, None);
+            logical_device.destroy_pipeline_layout(self.pipeline_layout, None);
+        }
     }
 }
 
