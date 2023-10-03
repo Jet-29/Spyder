@@ -11,7 +11,7 @@ pub fn run() {
         .build(&event_loop)
         .unwrap();
 
-    let spyder = Spyder::new(window);
+    let mut spyder = Spyder::new(window);
 
     event_loop.run(move |event, _, controlflow| match event {
         Event::WindowEvent {
@@ -25,7 +25,76 @@ pub fn run() {
             spyder.window.request_redraw();
         }
         Event::RedrawRequested(_) => {
-            //render here (later)
+            spyder.swap_chain.current_image =
+                (spyder.swap_chain.current_image + 1) % spyder.swap_chain.frames_in_flight;
+            let (image_index, _) = unsafe {
+                spyder
+                    .swap_chain
+                    .swap_chain_loader
+                    .acquire_next_image(
+                        spyder.swap_chain.swap_chain,
+                        u64::MAX,
+                        spyder.swap_chain.image_available[spyder.swap_chain.current_image as usize],
+                        vk::Fence::null(),
+                    )
+                    .expect("image acquisition trouble")
+            };
+
+            unsafe {
+                spyder
+                    .logical_device
+                    .wait_for_fences(
+                        &[spyder.swap_chain.may_begin_drawing
+                            [spyder.swap_chain.current_image as usize]],
+                        true,
+                        u64::MAX,
+                    )
+                    .expect("fence-waiting");
+                spyder
+                    .logical_device
+                    .reset_fences(&[spyder.swap_chain.may_begin_drawing
+                        [spyder.swap_chain.current_image as usize]])
+                    .expect("resetting fences");
+            }
+
+            let semaphores_available =
+                [spyder.swap_chain.image_available[spyder.swap_chain.current_image as usize]];
+            let waiting_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+            let semaphores_finished =
+                [spyder.swap_chain.rendering_finished[spyder.swap_chain.current_image as usize]];
+            let command_buffers = [spyder.command_buffers[image_index as usize]];
+            let submit_info = [vk::SubmitInfo::builder()
+                .wait_semaphores(&semaphores_available)
+                .wait_dst_stage_mask(&waiting_stages)
+                .command_buffers(&command_buffers)
+                .signal_semaphores(&semaphores_finished)
+                .build()];
+
+            unsafe {
+                spyder
+                    .logical_device
+                    .queue_submit(
+                        spyder.queues.graphics_queue,
+                        &submit_info,
+                        spyder.swap_chain.may_begin_drawing
+                            [spyder.swap_chain.current_image as usize],
+                    )
+                    .expect("queue submission");
+            };
+
+            let swap_chains = [spyder.swap_chain.swap_chain];
+            let indices = [image_index];
+            let present_info = vk::PresentInfoKHR::builder()
+                .wait_semaphores(&semaphores_finished)
+                .swapchains(&swap_chains)
+                .image_indices(&indices);
+            unsafe {
+                spyder
+                    .swap_chain
+                    .swap_chain_loader
+                    .queue_present(spyder.queues.graphics_queue, &present_info)
+                    .expect("queue presentation");
+            };
         }
         _ => {}
     });
@@ -45,6 +114,8 @@ struct Spyder {
     swap_chain: SwapChain,
     render_pass: vk::RenderPass,
     pipeline: Pipeline,
+    pools: Pools,
+    command_buffers: Vec<vk::CommandBuffer>,
 }
 
 impl Spyder {
@@ -76,13 +147,28 @@ impl Spyder {
             &logical_device,
             &surface,
             &queue_families,
-            &queues,
         );
 
         let render_pass = init_render_pass(&logical_device, physical_device, &surface);
         swap_chain.create_frame_buffers(&logical_device, render_pass);
 
         let pipeline = Pipeline::new(&logical_device, &swap_chain, &render_pass);
+
+        let pools = Pools::new(&logical_device, &queue_families);
+
+        let command_buffers = create_command_buffers(
+            &logical_device,
+            &pools,
+            swap_chain.frames_in_flight as usize,
+        );
+
+        fill_command_buffers(
+            &logical_device,
+            &command_buffers,
+            &swap_chain,
+            render_pass,
+            &pipeline,
+        );
 
         Self {
             window,
@@ -98,6 +184,8 @@ impl Spyder {
             swap_chain,
             render_pass,
             pipeline,
+            pools,
+            command_buffers,
         }
     }
 }
@@ -105,6 +193,10 @@ impl Spyder {
 impl Drop for Spyder {
     fn drop(&mut self) {
         unsafe {
+            self.logical_device
+                .device_wait_idle()
+                .expect("something wrong while waiting");
+            self.pools.cleanup(&self.logical_device);
             self.pipeline.cleanup(&self.logical_device);
             self.logical_device
                 .destroy_render_pass(self.render_pass, None);
@@ -291,6 +383,73 @@ fn init_render_pass(
     }
 }
 
+fn create_command_buffers(
+    logical_device: &ash::Device,
+    pools: &Pools,
+    amount: usize,
+) -> Vec<vk::CommandBuffer> {
+    let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::builder()
+        .command_pool(pools.command_pool_graphics)
+        .command_buffer_count(amount as u32);
+
+    unsafe {
+        logical_device
+            .allocate_command_buffers(&command_buffer_allocate_info)
+            .expect("Failed to allocate command buffers")
+    }
+}
+
+fn fill_command_buffers(
+    logical_device: &ash::Device,
+    command_buffers: &[vk::CommandBuffer],
+    swap_chain: &SwapChain,
+    render_pass: vk::RenderPass,
+    pipeline: &Pipeline,
+) {
+    for (i, &command_buffer) in command_buffers.iter().enumerate() {
+        let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder();
+        unsafe {
+            logical_device
+                .begin_command_buffer(command_buffer, &command_buffer_begin_info)
+                .expect("Failed to begin command buffer");
+        }
+
+        let clear_values = [vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [0.0, 0.0, 0.08, 1.0],
+            },
+        }];
+        let render_pass_begin_info = vk::RenderPassBeginInfo::builder()
+            .render_pass(render_pass)
+            .framebuffer(swap_chain.frame_buffers[i])
+            .render_area(vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: swap_chain.extent,
+            })
+            .clear_values(&clear_values);
+
+        unsafe {
+            logical_device.cmd_begin_render_pass(
+                command_buffer,
+                &render_pass_begin_info,
+                vk::SubpassContents::INLINE,
+            );
+
+            logical_device.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                pipeline.pipeline,
+            );
+
+            logical_device.cmd_draw(command_buffer, 3, 1, 0, 0);
+            logical_device.cmd_end_render_pass(command_buffer);
+            logical_device
+                .end_command_buffer(command_buffer)
+                .expect("Failed to end command buffer");
+        }
+    }
+}
+
 struct VulkanDebug {
     loader: ash::extensions::ext::DebugUtils,
     messenger: vk::DebugUtilsMessengerEXT,
@@ -459,6 +618,11 @@ struct SwapChain {
     frame_buffers: Vec<vk::Framebuffer>,
     surface_format: vk::SurfaceFormatKHR,
     extent: vk::Extent2D,
+    image_available: Vec<vk::Semaphore>,
+    rendering_finished: Vec<vk::Semaphore>,
+    may_begin_drawing: Vec<vk::Fence>,
+    frames_in_flight: u32,
+    current_image: u32,
 }
 
 impl SwapChain {
@@ -468,7 +632,6 @@ impl SwapChain {
         logical_device: &ash::Device,
         surface: &Surface,
         queue_families: &QueueFamilies,
-        queues: &Queues,
     ) -> Self {
         let surface_capabilities = surface.get_capabilities(physical_device);
         let extent = surface_capabilities.current_extent;
@@ -483,12 +646,13 @@ impl SwapChain {
         let surface_format = *surface_formats.first().unwrap();
         dbg!(&surface_format);
 
+        let frames_in_flight = 3
+            .max(surface_capabilities.min_image_count)
+            .min(surface_capabilities.max_image_count);
+
         let swap_chain_create_info = vk::SwapchainCreateInfoKHR::builder()
             .surface(surface.surface)
-            .min_image_count(
-                3.max(surface_capabilities.min_image_count)
-                    .min(surface_capabilities.max_image_count),
-            )
+            .min_image_count(frames_in_flight)
             .image_format(surface_format.format)
             .image_color_space(surface_format.color_space)
             .image_extent(surface_capabilities.current_extent)
@@ -513,7 +677,7 @@ impl SwapChain {
                 .expect("Failed to get swap chain images")
         };
 
-        let mut swap_chain_image_views = Vec::with_capacity(swap_chain_images.len());
+        let mut swap_chain_image_views = Vec::with_capacity(frames_in_flight as usize);
         for image in &swap_chain_images {
             let subresource_range = vk::ImageSubresourceRange::builder()
                 .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -532,6 +696,35 @@ impl SwapChain {
             swap_chain_image_views.push(image_view);
         }
 
+        let mut image_available = Vec::with_capacity(frames_in_flight as usize);
+        let mut rendering_finished = Vec::with_capacity(frames_in_flight as usize);
+        let mut may_begin_drawing = Vec::with_capacity(frames_in_flight as usize);
+
+        let semaphore_create_info = vk::SemaphoreCreateInfo::builder();
+        let fence_create_info =
+            vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
+
+        for _ in 0..frames_in_flight {
+            let semaphore_available = unsafe {
+                logical_device
+                    .create_semaphore(&semaphore_create_info, None)
+                    .expect("Failed to create semaphore")
+            };
+            let semaphore_finished =
+                unsafe { logical_device.create_semaphore(&semaphore_create_info, None) }
+                    .expect("Failed to create semaphore");
+
+            let fence = unsafe {
+                logical_device
+                    .create_fence(&fence_create_info, None)
+                    .expect("Failed to create fence")
+            };
+
+            image_available.push(semaphore_available);
+            rendering_finished.push(semaphore_finished);
+            may_begin_drawing.push(fence);
+        }
+
         Self {
             swap_chain,
             swap_chain_loader,
@@ -540,6 +733,11 @@ impl SwapChain {
             frame_buffers: Vec::new(),
             surface_format,
             extent,
+            frames_in_flight,
+            current_image: 0,
+            image_available,
+            rendering_finished,
+            may_begin_drawing,
         }
     }
 
@@ -562,7 +760,15 @@ impl SwapChain {
     }
 
     unsafe fn cleanup(&mut self, logical_device: &ash::Device) {
-        dbg!(&self.frame_buffers);
+        for fence in &self.may_begin_drawing {
+            logical_device.destroy_fence(*fence, None);
+        }
+        for semaphore in &self.image_available {
+            logical_device.destroy_semaphore(*semaphore, None);
+        }
+        for semaphore in &self.rendering_finished {
+            logical_device.destroy_semaphore(*semaphore, None);
+        }
         for fb in &self.frame_buffers {
             logical_device.destroy_framebuffer(*fb, None);
         }
@@ -619,7 +825,7 @@ impl Pipeline {
 
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder();
         let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
-            .topology(vk::PrimitiveTopology::POINT_LIST);
+            .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
 
         let viewport = [vk::Viewport::builder()
             .x(0.)
@@ -708,6 +914,47 @@ impl Pipeline {
         unsafe {
             logical_device.destroy_pipeline(self.pipeline, None);
             logical_device.destroy_pipeline_layout(self.pipeline_layout, None);
+        }
+    }
+}
+
+struct Pools {
+    command_pool_graphics: vk::CommandPool,
+    command_pool_transfer: vk::CommandPool,
+}
+
+impl Pools {
+    fn new(logical_device: &ash::Device, queue_families: &QueueFamilies) -> Self {
+        let graphics_command_pool_create_info = vk::CommandPoolCreateInfo::builder()
+            .queue_family_index(queue_families.graphics_queue_index.unwrap())
+            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+
+        let command_pool_graphics = unsafe {
+            logical_device
+                .create_command_pool(&graphics_command_pool_create_info, None)
+                .expect("Failed to create graphics command pool")
+        };
+
+        let transfer_command_pool_create_info = vk::CommandPoolCreateInfo::builder()
+            .queue_family_index(queue_families.transfer_queue_index.unwrap())
+            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+
+        let command_pool_transfer = unsafe {
+            logical_device
+                .create_command_pool(&transfer_command_pool_create_info, None)
+                .expect("Failed to create transfer command pool")
+        };
+
+        Self {
+            command_pool_graphics,
+            command_pool_transfer,
+        }
+    }
+
+    fn cleanup(&self, logical_device: &ash::Device) {
+        unsafe {
+            logical_device.destroy_command_pool(self.command_pool_graphics, None);
+            logical_device.destroy_command_pool(self.command_pool_transfer, None);
         }
     }
 }
