@@ -823,9 +823,24 @@ impl Pipeline {
                 .build(),
         ];
 
-        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder();
+        let vertex_attribute_descriptions = [vk::VertexInputAttributeDescription::builder()
+            .binding(0)
+            .location(0)
+            .format(vk::Format::R32G32B32A32_SFLOAT)
+            .offset(0)
+            .build()];
+
+        let vertex_binding_descriptions = [vk::VertexInputBindingDescription::builder()
+            .binding(0)
+            .stride(std::mem::size_of::<f32>() as u32 * 4)
+            .input_rate(vk::VertexInputRate::VERTEX)
+            .build()];
+
+        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
+            .vertex_attribute_descriptions(&vertex_attribute_descriptions)
+            .vertex_binding_descriptions(&vertex_binding_descriptions);
         let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
-            .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+            .topology(vk::PrimitiveTopology::POINT_LIST);
 
         let viewport = [vk::Viewport::builder()
             .x(0.)

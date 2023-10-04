@@ -1,11 +1,11 @@
-#version 450
+#version 460
 
-layout (location=0) out vec4 theColour;
+layout (location=0) out vec4 out_colour;
 
-layout (location=0) in vec4 colour;
+layout (location=0) in vec4 in_colour;
 
 
 
-void main(){
-    theColour = colour;
+void main() {
+    out_colour = in_colour;
 }

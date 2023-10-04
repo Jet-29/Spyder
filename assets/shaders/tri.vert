@@ -1,20 +1,10 @@
-#version 450
+#version 460
 
-vec4 positions[3] = vec4[](
-vec4(0.0, -0.5, 0.0, 1.0),
-vec4(0.5, 0.5, 0.0, 1.0),
-vec4(-0.5, 0.5, 0.0, 1.0)
-);
+layout (location=0) in vec4 position;
 
-vec4 colours[3] = vec4[](
-vec4(1., 0., 0., 1.),
-vec4(0., 1., 0., 1.),
-vec4(0., 0., 1., 1.)
-);
-
-layout (location=0) out vec4 colour;
+layout (location=0) out vec4 out_colour;
 
 void main() {
-    colour = colours[gl_VertexIndex];
-    gl_Position = positions[gl_VertexIndex];
+    out_colour = vec4(1., 0., 0., 1.);
+    gl_Position = position;
 }
