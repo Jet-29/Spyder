@@ -3,7 +3,7 @@ use ash::vk;
 pub mod dedicated;
 pub mod free_list;
 
-#[derive(Default, PartialEq, Eq)]
+#[derive(Default, PartialEq, Eq, Clone, Copy)]
 pub enum MemoryLocation {
     #[default]
     Unknown,

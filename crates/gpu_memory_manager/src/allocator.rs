@@ -38,12 +38,12 @@ impl AllocatorCreateInfoBuilder {
             allocation_sizes: AllocationSizes::default(),
         }
     }
-    pub fn instance(mut self, instance: ash::Instance) -> Self {
-        self.instance = Some(instance);
+    pub fn instance(mut self, instance: &ash::Instance) -> Self {
+        self.instance = Some(instance.clone());
         self
     }
-    pub fn device(mut self, device: ash::Device) -> Self {
-        self.device = Some(device);
+    pub fn device(mut self, device: &ash::Device) -> Self {
+        self.device = Some(device.clone());
         self
     }
     pub fn physical_device(mut self, physical_device: vk::PhysicalDevice) -> Self {
@@ -127,6 +127,30 @@ impl Allocator {
             buffer_image_granularity: granularity,
             allocation_sizes: info.allocation_sizes,
         }
+    }
+
+    pub fn create_buffer(
+        &mut self,
+        info: &vk::BufferCreateInfo,
+        allocation_info: &AllocationCreateInfo<'_>,
+    ) -> (vk::Buffer, Allocation) {
+        let buffer =
+            unsafe { self.device.create_buffer(info, None) }.expect("Failed to create buffer");
+
+        let requirements = unsafe { self.device.get_buffer_memory_requirements(buffer) };
+
+        let allocation = self.allocate(&AllocationCreateInfo {
+            requirements,
+            ..*allocation_info
+        });
+
+        unsafe {
+            self.device
+                .bind_buffer_memory(buffer, allocation.device_memory, allocation.offset)
+        }
+        .expect("Failed to bind buffer memory");
+
+        (buffer, allocation)
     }
 
     pub fn allocate(&mut self, info: &AllocationCreateInfo<'_>) -> Allocation {
@@ -243,10 +267,8 @@ impl Allocator {
             }
         }
     }
-}
 
-impl Drop for Allocator {
-    fn drop(&mut self) {
+    pub fn cleanup(&mut self) {
         self.report_memory_leaks();
 
         // Free all remaining memory blocks
@@ -559,17 +581,17 @@ pub struct AllocationCreateInfo<'a> {
 }
 
 impl<'a> AllocationCreateInfo<'a> {
-    pub fn builder() -> AllocationCreateDescBuilder<'a> {
-        AllocationCreateDescBuilder::new()
+    pub fn builder() -> AllocationCreateInfoBuilder<'a> {
+        AllocationCreateInfoBuilder::new()
     }
 }
 
 #[derive(Default)]
-pub struct AllocationCreateDescBuilder<'a> {
+pub struct AllocationCreateInfoBuilder<'a> {
     inner: AllocationCreateInfo<'a>,
 }
 
-impl<'a> AllocationCreateDescBuilder<'a> {
+impl<'a> AllocationCreateInfoBuilder<'a> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -629,18 +651,18 @@ impl Allocation {
     pub fn is_null(&self) -> bool {
         self.chunk_id.is_none()
     }
-    pub fn mapped_ptr(&self) -> Option<std::ptr::NonNull<std::ffi::c_void>> {
-        self.mapped_ptr.map(|SendSyncPtr(p)| p)
+    pub fn mapped_ptr(&self) -> std::ptr::NonNull<std::ffi::c_void> {
+        self.mapped_ptr
+            .map(|SendSyncPtr(p)| p)
+            .expect("Tried getting a mapped pointer of a null or non cpu allocation")
     }
-    pub fn mapped_slice(&self) -> Option<&[u8]> {
-        self.mapped_ptr().map(|ptr| unsafe {
-            std::slice::from_raw_parts(ptr.cast().as_ptr(), self.size as usize)
-        })
+    pub fn mapped_slice(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.mapped_ptr().cast().as_ptr(), self.size as usize) }
     }
-    pub fn mapped_slice_mut(&mut self) -> Option<&mut [u8]> {
-        self.mapped_ptr().map(|ptr| unsafe {
-            std::slice::from_raw_parts_mut(ptr.cast().as_ptr(), self.size as usize)
-        })
+    pub fn mapped_slice_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            std::slice::from_raw_parts_mut(self.mapped_ptr().cast().as_ptr(), self.size as usize)
+        }
     }
 
     /// Returns the memory block of the allocation.
