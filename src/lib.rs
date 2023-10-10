@@ -4,6 +4,8 @@ use ash::vk;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use winit::event::{Event, WindowEvent};
 
+use gpu_memory_manager::prelude::*;
+
 pub fn run() {
     // Windowing
     let event_loop = winit::event_loop::EventLoop::new();
@@ -116,6 +118,9 @@ struct Spyder {
     pipeline: Pipeline,
     pools: Pools,
     command_buffers: Vec<vk::CommandBuffer>,
+    allocator: Allocator,
+    buffers: Vec<vk::Buffer>,
+    allocations: Vec<Allocation>,
 }
 
 impl Spyder {
@@ -162,12 +167,73 @@ impl Spyder {
             swap_chain.frames_in_flight as usize,
         );
 
+        let allocator_create_info = AllocatorCreateInfo::builder()
+            .instance(&instance)
+            .device(&logical_device)
+            .physical_device(physical_device)
+            .build();
+
+        let mut allocator = Allocator::new(&allocator_create_info);
+
+        let position_buffer_create_info = vk::BufferCreateInfo::builder()
+            .size(16)
+            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
+            .build();
+
+        let point_size_buffer_create_info = vk::BufferCreateInfo::builder()
+            .size(4)
+            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
+            .build();
+
+        let colour_buffer_create_info = vk::BufferCreateInfo::builder()
+            .size(16)
+            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
+            .build();
+
+        let allocation_create_info = AllocationCreateInfo::builder()
+            .location(MemoryLocation::CpuToGpu)
+            .build();
+
+        let (position_buffer, position_allocation) =
+            allocator.create_buffer(&position_buffer_create_info, &allocation_create_info);
+        let (point_size_buffer, point_size_allocation) =
+            allocator.create_buffer(&point_size_buffer_create_info, &allocation_create_info);
+        let (colour_buffer, colour_allocation) =
+            allocator.create_buffer(&colour_buffer_create_info, &allocation_create_info);
+
+        let position_ptr = position_allocation.mapped_ptr();
+        let point_size_ptr = point_size_allocation.mapped_ptr();
+        let colour_ptr = colour_allocation.mapped_ptr();
+
+        let positions = [0.1f32, -0.3f32, 0.0f32, 1.0f32];
+        let point_sizes = [50.0f32];
+        let colours = [1.0f32, 1.0f32, 0.0f32, 1.0f32];
+        unsafe {
+            position_ptr
+                .cast::<f32>()
+                .as_ptr()
+                .copy_from_nonoverlapping(positions.as_ptr(), 4);
+
+            point_size_ptr
+                .cast::<f32>()
+                .as_ptr()
+                .copy_from_nonoverlapping(point_sizes.as_ptr(), 4);
+
+            colour_ptr
+                .cast::<f32>()
+                .as_ptr()
+                .copy_from_nonoverlapping(colours.as_ptr(), 4)
+        };
+
+        let buffers = vec![position_buffer, point_size_buffer, colour_buffer];
+
         fill_command_buffers(
             &logical_device,
             &command_buffers,
             &swap_chain,
             render_pass,
             &pipeline,
+            &buffers,
         );
 
         Self {
@@ -186,6 +252,13 @@ impl Spyder {
             pipeline,
             pools,
             command_buffers,
+            allocator,
+            buffers,
+            allocations: vec![
+                position_allocation,
+                point_size_allocation,
+                colour_allocation,
+            ],
         }
     }
 }
@@ -196,6 +269,14 @@ impl Drop for Spyder {
             self.logical_device
                 .device_wait_idle()
                 .expect("something wrong while waiting");
+
+            for idx in 0..self.allocations.len() {
+                self.allocator.free(self.allocations.remove(idx));
+                self.logical_device.destroy_buffer(self.buffers[idx], None);
+            }
+
+            self.allocator.cleanup();
+
             self.pools.cleanup(&self.logical_device);
             self.pipeline.cleanup(&self.logical_device);
             self.logical_device
@@ -205,7 +286,7 @@ impl Drop for Spyder {
 
             std::mem::ManuallyDrop::drop(&mut self.surface);
             std::mem::ManuallyDrop::drop(&mut self.debug);
-            self.instance.destroy_instance(None)
+            self.instance.destroy_instance(None);
         };
     }
 }
@@ -405,6 +486,7 @@ fn fill_command_buffers(
     swap_chain: &SwapChain,
     render_pass: vk::RenderPass,
     pipeline: &Pipeline,
+    buffers: &Vec<vk::Buffer>,
 ) {
     for (i, &command_buffer) in command_buffers.iter().enumerate() {
         let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder();
@@ -441,7 +523,8 @@ fn fill_command_buffers(
                 pipeline.pipeline,
             );
 
-            logical_device.cmd_draw(command_buffer, 3, 1, 0, 0);
+            logical_device.cmd_bind_vertex_buffers(command_buffer, 0, buffers, &[0]);
+            logical_device.cmd_draw(command_buffer, 1, 1, 0, 0);
             logical_device.cmd_end_render_pass(command_buffer);
             logical_device
                 .end_command_buffer(command_buffer)
@@ -823,18 +906,44 @@ impl Pipeline {
                 .build(),
         ];
 
-        let vertex_attribute_descriptions = [vk::VertexInputAttributeDescription::builder()
-            .binding(0)
-            .location(0)
-            .format(vk::Format::R32G32B32A32_SFLOAT)
-            .offset(0)
-            .build()];
+        let vertex_attribute_descriptions = [
+            vk::VertexInputAttributeDescription::builder()
+                .binding(0)
+                .location(0)
+                .offset(0)
+                .format(vk::Format::R32G32B32A32_SFLOAT)
+                .build(),
+            vk::VertexInputAttributeDescription::builder()
+                .binding(1)
+                .location(1)
+                .offset(0)
+                .format(vk::Format::R32_SFLOAT)
+                .build(),
+            vk::VertexInputAttributeDescription::builder()
+                .binding(2)
+                .location(2)
+                .offset(0)
+                .format(vk::Format::R32G32B32A32_SFLOAT)
+                .build(),
+        ];
 
-        let vertex_binding_descriptions = [vk::VertexInputBindingDescription::builder()
-            .binding(0)
-            .stride(std::mem::size_of::<f32>() as u32 * 4)
-            .input_rate(vk::VertexInputRate::VERTEX)
-            .build()];
+        let vertex_binding_descriptions = [
+            vk::VertexInputBindingDescription::builder()
+                .binding(0)
+                .stride(std::mem::size_of::<f32>() as u32 * 4)
+                .input_rate(vk::VertexInputRate::VERTEX)
+                .build(),
+            vk::VertexInputBindingDescription::builder()
+                .binding(1)
+                .stride(std::mem::size_of::<f32>() as u32)
+                .input_rate(vk::VertexInputRate::VERTEX)
+                .build(),
+            vk::VertexInputBindingDescription::builder()
+                .binding(2)
+                .stride(std::mem::size_of::<f32>() as u32 * 4)
+                .input_rate(vk::VertexInputRate::VERTEX)
+                .build(),
+        ];
 
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_attribute_descriptions(&vertex_attribute_descriptions)
@@ -972,6 +1081,11 @@ impl Pools {
             logical_device.destroy_command_pool(self.command_pool_transfer, None);
         }
     }
+}
+
+struct Buffer {
+    buffer: vk::Buffer,
+    allocation: Allocation,
 }
 
 unsafe extern "system" fn vulkan_debug_callback(

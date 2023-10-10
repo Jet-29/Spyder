@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 renderer_macros = { path = "crates/renderer_macros" }
+gpu_memory_manager = { path = "crates/gpu_memory_manager" }
 
 ash = { version = "0.37.3", features = ["linked"] }
 ash-window = "0.12.0"
