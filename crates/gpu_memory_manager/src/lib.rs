@@ -1,14 +1,19 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+pub mod allocator;
+pub mod allocator_types;
+
+mod utils;
+
+#[derive(Clone, Copy)]
+pub struct AllocationSizes {
+    device_memory_block_size: u64,
+    host_memory_block_size: u64,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+impl Default for AllocationSizes {
+    fn default() -> Self {
+        Self {
+            device_memory_block_size: 256 * 1024 * 1024,
+            host_memory_block_size: 64 * 1024 * 1024,
+        }
     }
 }

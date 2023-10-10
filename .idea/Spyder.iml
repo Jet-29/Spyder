@@ -7,6 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/renderer_macros/examples" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/renderer_macros/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/gpu_memory_manager/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/gpu_memory_manager/examples" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/crates/renderer_macros/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/crates/gpu_memory_manager/target" />
