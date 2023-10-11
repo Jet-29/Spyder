@@ -153,6 +153,11 @@ impl Allocator {
         (buffer, allocation)
     }
 
+    pub fn destroy_buffer(&mut self, buffer: vk::Buffer, allocation: Allocation) {
+        unsafe { self.device.destroy_buffer(buffer, None) };
+        self.free(allocation);
+    }
+
     pub fn allocate(&mut self, info: &AllocationCreateInfo<'_>) -> Allocation {
         let size = info.requirements.size;
         let alignment = info.requirements.alignment;

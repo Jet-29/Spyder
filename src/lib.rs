@@ -119,8 +119,7 @@ struct Spyder {
     pools: Pools,
     command_buffers: Vec<vk::CommandBuffer>,
     allocator: Allocator,
-    buffers: Vec<vk::Buffer>,
-    allocations: Vec<Allocation>,
+    buffers: Vec<Buffer>,
 }
 
 impl Spyder {
@@ -175,55 +174,46 @@ impl Spyder {
 
         let mut allocator = Allocator::new(&allocator_create_info);
 
-        let position_buffer_create_info = vk::BufferCreateInfo::builder()
-            .size(16)
-            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
-            .build();
+        let point_count = 2;
+        let positions = [
+            0.1f32, -0.3f32, 0.0f32, 1.0f32, -0.3f32, 0.5f32, 0.0f32, 1.0f32,
+        ];
+        let point_sizes = [50.0f32, 30.0f32];
+        let colours = [
+            1.0f32, 1.0f32, 0.0f32, 1.0f32, 0.0f32, 1.0f32, 1.0f32, 1.0f32,
+        ];
 
-        let point_size_buffer_create_info = vk::BufferCreateInfo::builder()
-            .size(4)
-            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
-            .build();
+        let mut position_buffer = Buffer::new(
+            &mut allocator,
+            16 * point_count,
+            vk::BufferUsageFlags::VERTEX_BUFFER,
+            MemoryLocation::CpuToGpu,
+            "position_buffer",
+        );
+        let mut point_size_buffer = Buffer::new(
+            &mut allocator,
+            4 * point_count,
+            vk::BufferUsageFlags::VERTEX_BUFFER,
+            MemoryLocation::CpuToGpu,
+            "point_size_buffer",
+        );
+        let mut colour_buffer = Buffer::new(
+            &mut allocator,
+            16 * point_count,
+            vk::BufferUsageFlags::VERTEX_BUFFER,
+            MemoryLocation::CpuToGpu,
+            "colour_buffer",
+        );
 
-        let colour_buffer_create_info = vk::BufferCreateInfo::builder()
-            .size(16)
-            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
-            .build();
+        position_buffer.fill(&positions);
+        point_size_buffer.fill(&point_sizes);
+        colour_buffer.fill(&colours);
 
-        let allocation_create_info = AllocationCreateInfo::builder()
-            .location(MemoryLocation::CpuToGpu)
-            .build();
-
-        let (position_buffer, position_allocation) =
-            allocator.create_buffer(&position_buffer_create_info, &allocation_create_info);
-        let (point_size_buffer, point_size_allocation) =
-            allocator.create_buffer(&point_size_buffer_create_info, &allocation_create_info);
-        let (colour_buffer, colour_allocation) =
-            allocator.create_buffer(&colour_buffer_create_info, &allocation_create_info);
-
-        let position_ptr = position_allocation.mapped_ptr();
-        let point_size_ptr = point_size_allocation.mapped_ptr();
-        let colour_ptr = colour_allocation.mapped_ptr();
-
-        let positions = [0.1f32, -0.3f32, 0.0f32, 1.0f32];
-        let point_sizes = [50.0f32];
-        let colours = [1.0f32, 1.0f32, 0.0f32, 1.0f32];
-        unsafe {
-            position_ptr
-                .cast::<f32>()
-                .as_ptr()
-                .copy_from_nonoverlapping(positions.as_ptr(), 4);
-
-            point_size_ptr
-                .cast::<f32>()
-                .as_ptr()
-                .copy_from_nonoverlapping(point_sizes.as_ptr(), 4);
-
-            colour_ptr
-                .cast::<f32>()
-                .as_ptr()
-                .copy_from_nonoverlapping(colours.as_ptr(), 4)
-        };
+        let internal_buffers = vec![
+            position_buffer.buffer,
+            point_size_buffer.buffer,
+            colour_buffer.buffer,
+        ];
 
         let buffers = vec![position_buffer, point_size_buffer, colour_buffer];
 
@@ -233,7 +223,8 @@ impl Spyder {
             &swap_chain,
             render_pass,
             &pipeline,
-            &buffers,
+            &internal_buffers,
+            point_count,
         );
 
         Self {
@@ -254,11 +245,6 @@ impl Spyder {
             command_buffers,
             allocator,
             buffers,
-            allocations: vec![
-                position_allocation,
-                point_size_allocation,
-                colour_allocation,
-            ],
         }
     }
 }
@@ -270,9 +256,9 @@ impl Drop for Spyder {
                 .device_wait_idle()
                 .expect("something wrong while waiting");
 
-            for idx in 0..self.allocations.len() {
-                self.allocator.free(self.allocations.remove(idx));
-                self.logical_device.destroy_buffer(self.buffers[idx], None);
+            for idx in (0..self.buffers.len()).rev() {
+                let buffer = self.buffers.remove(idx);
+                buffer.cleanup(&mut self.allocator)
             }
 
             self.allocator.cleanup();
@@ -486,7 +472,8 @@ fn fill_command_buffers(
     swap_chain: &SwapChain,
     render_pass: vk::RenderPass,
     pipeline: &Pipeline,
-    buffers: &Vec<vk::Buffer>,
+    buffers: &[vk::Buffer],
+    point_count: u64,
 ) {
     for (i, &command_buffer) in command_buffers.iter().enumerate() {
         let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder();
@@ -523,8 +510,9 @@ fn fill_command_buffers(
                 pipeline.pipeline,
             );
 
-            logical_device.cmd_bind_vertex_buffers(command_buffer, 0, buffers, &[0]);
-            logical_device.cmd_draw(command_buffer, 1, 1, 0, 0);
+            logical_device.cmd_bind_vertex_buffers(command_buffer, 0, buffers, &[0, 0, 0]);
+
+            logical_device.cmd_draw(command_buffer, point_count as u32, 1, 0, 0);
             logical_device.cmd_end_render_pass(command_buffer);
             logical_device
                 .end_command_buffer(command_buffer)
@@ -1086,6 +1074,43 @@ impl Pools {
 struct Buffer {
     buffer: vk::Buffer,
     allocation: Allocation,
+}
+
+impl Buffer {
+    fn new(
+        allocator: &mut Allocator,
+        size: u64,
+        usage: vk::BufferUsageFlags,
+        location: MemoryLocation,
+        name: &str,
+    ) -> Self {
+        let buffer_create_info = vk::BufferCreateInfo::builder()
+            .size(size)
+            .usage(usage)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let allocation_create_info = AllocationCreateInfo::builder()
+            .name(name)
+            .location(location)
+            .build();
+
+        let (buffer, allocation) =
+            allocator.create_buffer(&buffer_create_info, &allocation_create_info);
+
+        Self { buffer, allocation }
+    }
+
+    fn fill<T: Sized>(&mut self, data: &[T]) {
+        let mapped_ptr = self.allocation.mapped_ptr().as_ptr() as *mut T;
+        unsafe {
+            std::ptr::copy_nonoverlapping(data.as_ptr(), mapped_ptr, data.len());
+        }
+    }
+
+    fn cleanup(self, allocator: &mut Allocator) {
+        let Self { buffer, allocation } = self;
+        allocator.destroy_buffer(buffer, allocation);
+    }
 }
 
 unsafe extern "system" fn vulkan_debug_callback(
