@@ -174,48 +174,38 @@ impl Spyder {
 
         let mut allocator = Allocator::new(&allocator_create_info);
 
-        let point_count = 2;
         let positions = [
-            0.1f32, -0.3f32, 0.0f32, 1.0f32, -0.3f32, 0.5f32, 0.0f32, 1.0f32,
+            0.5f32, 0.0f32, 0.0f32, 1.0f32, 0.0f32, 0.2f32, 0.0f32, 1.0f32, -0.5f32, 0.0f32,
+            0.0f32, 1.0f32, -0.9f32, -0.9f32, 0.0f32, 1.0f32, 0.3f32, -0.8f32, 0.0f32, 1.0f32,
+            0.0f32, -0.6f32, 0.0f32, 1.0f32,
         ];
-        let point_sizes = [50.0f32, 30.0f32];
         let colours = [
-            1.0f32, 1.0f32, 0.0f32, 1.0f32, 0.0f32, 1.0f32, 1.0f32, 1.0f32,
+            0.0f32, 1.0f32, 0.0f32, 1.0f32, 0.0f32, 1.0f32, 0.0f32, 1.0f32, 0.0f32, 1.0f32, 0.0f32,
+            1.0f32, 0.8f32, 0.7f32, 0.0f32, 1.0f32, 0.8f32, 0.7f32, 0.0f32, 1.0f32, 0.0f32, 0.0f32,
+            1.0f32, 1.0f32,
         ];
 
         let mut position_buffer = Buffer::new(
             &mut allocator,
-            16 * point_count,
+            positions.len() as u64 * 4,
             vk::BufferUsageFlags::VERTEX_BUFFER,
             MemoryLocation::CpuToGpu,
             "position_buffer",
         );
-        let mut point_size_buffer = Buffer::new(
-            &mut allocator,
-            4 * point_count,
-            vk::BufferUsageFlags::VERTEX_BUFFER,
-            MemoryLocation::CpuToGpu,
-            "point_size_buffer",
-        );
         let mut colour_buffer = Buffer::new(
             &mut allocator,
-            16 * point_count,
+            colours.len() as u64 * 4,
             vk::BufferUsageFlags::VERTEX_BUFFER,
             MemoryLocation::CpuToGpu,
             "colour_buffer",
         );
 
         position_buffer.fill(&positions);
-        point_size_buffer.fill(&point_sizes);
         colour_buffer.fill(&colours);
 
-        let internal_buffers = vec![
-            position_buffer.buffer,
-            point_size_buffer.buffer,
-            colour_buffer.buffer,
-        ];
+        let internal_buffers = vec![position_buffer.buffer, colour_buffer.buffer];
 
-        let buffers = vec![position_buffer, point_size_buffer, colour_buffer];
+        let buffers = vec![position_buffer, colour_buffer];
 
         fill_command_buffers(
             &logical_device,
@@ -224,7 +214,6 @@ impl Spyder {
             render_pass,
             &pipeline,
             &internal_buffers,
-            point_count,
         );
 
         Self {
@@ -473,7 +462,6 @@ fn fill_command_buffers(
     render_pass: vk::RenderPass,
     pipeline: &Pipeline,
     buffers: &[vk::Buffer],
-    point_count: u64,
 ) {
     for (i, &command_buffer) in command_buffers.iter().enumerate() {
         let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder();
@@ -510,9 +498,14 @@ fn fill_command_buffers(
                 pipeline.pipeline,
             );
 
-            logical_device.cmd_bind_vertex_buffers(command_buffer, 0, buffers, &[0, 0, 0]);
+            logical_device.cmd_bind_vertex_buffers(
+                command_buffer,
+                0,
+                buffers,
+                vec![0; buffers.len()].as_slice(),
+            );
 
-            logical_device.cmd_draw(command_buffer, point_count as u32, 1, 0, 0);
+            logical_device.cmd_draw(command_buffer, 6, 1, 0, 0);
             logical_device.cmd_end_render_pass(command_buffer);
             logical_device
                 .end_command_buffer(command_buffer)
@@ -905,12 +898,6 @@ impl Pipeline {
                 .binding(1)
                 .location(1)
                 .offset(0)
-                .format(vk::Format::R32_SFLOAT)
-                .build(),
-            vk::VertexInputAttributeDescription::builder()
-                .binding(2)
-                .location(2)
-                .offset(0)
                 .format(vk::Format::R32G32B32A32_SFLOAT)
                 .build(),
         ];
@@ -923,11 +910,6 @@ impl Pipeline {
                 .build(),
             vk::VertexInputBindingDescription::builder()
                 .binding(1)
-                .stride(std::mem::size_of::<f32>() as u32)
-                .input_rate(vk::VertexInputRate::VERTEX)
-                .build(),
-            vk::VertexInputBindingDescription::builder()
-                .binding(2)
                 .stride(std::mem::size_of::<f32>() as u32 * 4)
                 .input_rate(vk::VertexInputRate::VERTEX)
                 .build(),
@@ -937,7 +919,7 @@ impl Pipeline {
             .vertex_attribute_descriptions(&vertex_attribute_descriptions)
             .vertex_binding_descriptions(&vertex_binding_descriptions);
         let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
-            .topology(vk::PrimitiveTopology::POINT_LIST);
+            .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
 
         let viewport = [vk::Viewport::builder()
             .x(0.)
