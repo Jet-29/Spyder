@@ -1,5 +1,1 @@
-use spyder::run;
-
-fn main() {
-    run();
-}
+fn main() {}

@@ -8,9 +8,23 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/renderer_macros/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/gpu_memory_manager/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/gpu_memory_manager/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/app_base/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/logger/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/renderer_base/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/renderer_rasterization/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/resource_manager/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/resource_manager/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/utils/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/logger/examples" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/crates/renderer_macros/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/crates/gpu_memory_manager/target" />
+      <excludeFolder url="file://$MODULE_DIR$/crates/app_base/target" />
+      <excludeFolder url="file://$MODULE_DIR$/crates/logger/target" />
+      <excludeFolder url="file://$MODULE_DIR$/crates/renderer_base/target" />
+      <excludeFolder url="file://$MODULE_DIR$/crates/renderer_rasterization/target" />
+      <excludeFolder url="file://$MODULE_DIR$/crates/resource_manager/target" />
+      <excludeFolder url="file://$MODULE_DIR$/crates/utils/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
