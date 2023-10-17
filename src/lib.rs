@@ -1091,6 +1091,5 @@ unsafe extern "system" fn vulkan_debug_callback(
     let severity = format!("{:?}", message_severity).to_uppercase();
     let ty = format!("{:?}", message_type).to_lowercase();
     internal_log!(severity, format!("[{ty}] {message:?}"));
-    // println!("[Debug][{}][{}] {:?}", severity, ty, message); // TODO: Logging...
     vk::FALSE
 }
