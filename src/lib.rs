@@ -5,6 +5,7 @@ use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use winit::event::{Event, WindowEvent};
 
 use gpu_memory_manager::prelude::*;
+use logger::internal_log;
 
 pub fn run() {
     // Windowing
@@ -296,23 +297,8 @@ fn init_instance(entry: &ash::Entry, window: &winit::window::Window) -> ash::Ins
             .as_mut(),
     );
 
-    let mut debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
-        .message_severity(
-            vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
-                | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
-                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
-        )
-        .message_type(
-            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
-                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
-        )
-        .pfn_user_callback(Some(vulkan_debug_callback));
-
     //  Finally initialize the instance
     let instance_create_info = vk::InstanceCreateInfo::builder()
-        .push_next(&mut debug_create_info)
         .application_info(&app_info)
         .enabled_layer_names(&layer_name_pointers)
         .enabled_extension_names(&extension_name_pointers);
@@ -1102,8 +1088,9 @@ unsafe extern "system" fn vulkan_debug_callback(
     _user_data: *mut std::os::raw::c_void,
 ) -> vk::Bool32 {
     let message = std::ffi::CStr::from_ptr((*p_callback_data).p_message);
-    let severity = format!("{:?}", message_severity).to_lowercase();
+    let severity = format!("{:?}", message_severity).to_uppercase();
     let ty = format!("{:?}", message_type).to_lowercase();
-    println!("[Debug][{}][{}] {:?}", severity, ty, message); // TODO: Logging...
+    internal_log!(severity, format!("[{ty}] {message:?}"));
+    // println!("[Debug][{}][{}] {:?}", severity, ty, message); // TODO: Logging...
     vk::FALSE
 }
