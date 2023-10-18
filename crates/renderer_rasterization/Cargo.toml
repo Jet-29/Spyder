@@ -3,6 +3,12 @@ name = "renderer_rasterization"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+renderer_macros = { path = "../renderer_macros" }
+gpu_memory_manager = { path = "../gpu_memory_manager" }
+logger = { path = "../logger" }
+
+ash = { version = "0.37.3", features = ["linked"] }
+ash-window = "0.12.0"
+winit = "0.28.7"
+raw-window-handle = "0.5.2"

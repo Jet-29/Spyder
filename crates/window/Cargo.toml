@@ -1,0 +1,10 @@
+[package]
+name = "window"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+app_base = { path = "../app_base" }
+logger = { path = "../logger" }
+
+winit = "0.28.7"

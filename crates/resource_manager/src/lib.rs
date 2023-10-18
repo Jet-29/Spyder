@@ -57,7 +57,12 @@ impl ResourceManager {
 
     pub fn remove_unchecked<T: Any>(&mut self) -> T {
         let id = self.get_resource_id::<T>();
-        *self.resources.remove(&id).unwrap().downcast::<T>().unwrap()
+        *self
+            .resources
+            .remove(&id)
+            .expect("Tried removing resource from the resource manager")
+            .downcast::<T>()
+            .unwrap()
     }
 
     fn get_resource_id<T: Any>(&self) -> ResourceID {

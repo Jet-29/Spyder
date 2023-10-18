@@ -4,11 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-renderer_macros = { path = "crates/renderer_macros" }
-gpu_memory_manager = { path = "crates/gpu_memory_manager" }
+app_base = { path = "crates/app_base" }
 logger = { path = "crates/logger" }
-
-ash = { version = "0.37.3", features = ["linked"] }
-ash-window = "0.12.0"
-winit = "0.28.7"
-raw-window-handle = "0.5.2"
+window = { path = "crates/window" }
