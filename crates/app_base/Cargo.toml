@@ -4,3 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+resource_manager = { path = "../resource_manager" }
+logger = { path = "../logger" }
