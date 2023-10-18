@@ -44,6 +44,9 @@ macro_rules! fatal {
 #[macro_export]
 macro_rules! internal_log {
     ($level:expr, $msg:expr) => {
-        println!("{}", format!("[{}] {}", $level, $msg).as_str()); // TODO add colours cause pretty
+        println!(
+            "{}",
+            format!("[{}] {}", $level, format!($msg).as_str()).as_str()
+        ); // TODO add colours cause pretty
     };
 }
