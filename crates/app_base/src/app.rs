@@ -1,9 +1,11 @@
 use crate::plugin::Plugin;
+use event_manager::EventManager;
 use logger::{debug, trace};
 use resource_manager::ResourceManager;
 
 pub struct App {
     resources: ResourceManager,
+    events: EventManager,
     run_function: Box<dyn FnOnce(Self)>,
 }
 
@@ -11,6 +13,7 @@ impl Default for App {
     fn default() -> Self {
         Self {
             resources: ResourceManager::default(),
+            events: EventManager::default(),
             run_function: Box::new(run_once),
         }
     }
@@ -45,6 +48,14 @@ impl App {
 
     pub fn get_resource_manager_mut(&mut self) -> &mut ResourceManager {
         &mut self.resources
+    }
+
+    pub fn get_event_manager(&self) -> &EventManager {
+        &self.events
+    }
+
+    pub fn get_event_manager_mut(&mut self) -> &mut EventManager {
+        &mut self.events
     }
 }
 

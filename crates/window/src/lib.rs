@@ -34,12 +34,19 @@ fn run_window(mut app: App) {
         winit::event::Event::WindowEvent { event, .. } => match event {
             winit::event::WindowEvent::CloseRequested => {
                 control_flow.set_exit();
+                app.get_event_manager_mut().add(CloseRequestedEvent);
             }
             _ => (),
         },
+        winit::event::Event::RedrawRequested(_) => {
+            app.get_event_manager_mut().add(RequestRedrawEvent);
+        }
         winit::event::Event::MainEventsCleared => {
             window.request_redraw();
         }
         _ => (),
     });
 }
+
+struct CloseRequestedEvent;
+struct RequestRedrawEvent;
