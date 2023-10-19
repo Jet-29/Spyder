@@ -17,6 +17,8 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/utils/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/logger/examples" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/window/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/event_manager/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/event_manager/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/resource_manager/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/crates/renderer_macros/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
@@ -28,6 +30,7 @@
       <excludeFolder url="file://$MODULE_DIR$/crates/resource_manager/target" />
       <excludeFolder url="file://$MODULE_DIR$/crates/utils/target" />
       <excludeFolder url="file://$MODULE_DIR$/crates/window/target" />
+      <excludeFolder url="file://$MODULE_DIR$/crates/event_manager/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
