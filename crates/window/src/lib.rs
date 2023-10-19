@@ -20,8 +20,8 @@ impl Plugin for WindowPlugin {
     }
 }
 
-struct WindowResource {
-    window: winit::window::Window,
+pub struct WindowResource {
+    pub window: winit::window::Window,
     event_loop: winit::event_loop::EventLoop<()>,
 }
 
@@ -39,14 +39,15 @@ fn run_window(mut app: App) {
             _ => (),
         },
         winit::event::Event::RedrawRequested(_) => {
-            app.get_event_manager_mut().add(RequestRedrawEvent);
+            app.get_event_manager_mut().add(RedrawRequestedEvent);
         }
         winit::event::Event::MainEventsCleared => {
             window.request_redraw();
+            app.update();
         }
         _ => (),
     });
 }
 
 struct CloseRequestedEvent;
-struct RequestRedrawEvent;
+pub struct RedrawRequestedEvent;

@@ -1,10 +1,8 @@
 [package]
-name = "app_base"
+name = "scheduler"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 event_manager = { path = "../event_manager" }
 resource_manager = { path = "../resource_manager" }
-scheduler = { path = "../scheduler" }
-logger = { path = "../logger" }

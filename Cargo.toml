@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 app_base = { path = "crates/app_base" }
 logger = { path = "crates/logger" }
+renderer_rasterization = { path = "crates/renderer_rasterization" }
 window = { path = "crates/window" }

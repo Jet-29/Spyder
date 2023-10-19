@@ -1,110 +1,112 @@
 use std::ffi::CString;
 
+use app_base::prelude::{App, Plugin};
 use ash::vk;
+use event_manager::EventManager;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use winit::event::{Event, WindowEvent};
 
 use gpu_memory_manager::prelude::*;
 use logger::internal_log;
+use resource_manager::ResourceManager;
 
-pub fn run() {
-    // Windowing
-    let event_loop = winit::event_loop::EventLoop::new();
-    let window = winit::window::WindowBuilder::new()
-        .build(&event_loop)
-        .unwrap();
+pub struct RasterizationRendererPlugin;
 
-    let mut spyder = Spyder::new(window);
+impl Plugin for RasterizationRendererPlugin {
+    fn init(&self, app: &mut App) {
+        app.get_scheduler_mut().add_system(render);
 
-    event_loop.run(move |event, _, controlflow| match event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } => {
-            *controlflow = winit::event_loop::ControlFlow::Exit;
+        let window_handle = app
+            .get_resource_manager_mut()
+            .remove::<window::WindowResource>()
+            .expect("No window handle in resource manager");
+
+        app.get_resource_manager_mut()
+            .add(Spyder::new(&window_handle.window));
+        app.get_resource_manager_mut().add(window_handle);
+    }
+}
+
+fn render(events: &mut EventManager, resources: &mut ResourceManager) {
+    if events.get_event::<window::RedrawRequestedEvent>().is_some() {
+        let spyder = resources
+            .get_mut::<Spyder>()
+            .expect("No spyder in resource manager");
+
+        spyder.swap_chain.current_image =
+            (spyder.swap_chain.current_image + 1) % spyder.swap_chain.frames_in_flight;
+        let (image_index, _) = unsafe {
+            spyder
+                .swap_chain
+                .swap_chain_loader
+                .acquire_next_image(
+                    spyder.swap_chain.swap_chain,
+                    u64::MAX,
+                    spyder.swap_chain.image_available[spyder.swap_chain.current_image as usize],
+                    vk::Fence::null(),
+                )
+                .expect("image acquisition trouble")
+        };
+
+        unsafe {
+            spyder
+                .logical_device
+                .wait_for_fences(
+                    &[spyder.swap_chain.may_begin_drawing
+                        [spyder.swap_chain.current_image as usize]],
+                    true,
+                    u64::MAX,
+                )
+                .expect("fence-waiting");
+            spyder
+                .logical_device
+                .reset_fences(&[
+                    spyder.swap_chain.may_begin_drawing[spyder.swap_chain.current_image as usize]
+                ])
+                .expect("resetting fences");
         }
-        Event::MainEventsCleared => {
-            // doing the work here (later)
-            spyder.window.request_redraw();
-        }
-        Event::RedrawRequested(_) => {
-            spyder.swap_chain.current_image =
-                (spyder.swap_chain.current_image + 1) % spyder.swap_chain.frames_in_flight;
-            let (image_index, _) = unsafe {
-                spyder
-                    .swap_chain
-                    .swap_chain_loader
-                    .acquire_next_image(
-                        spyder.swap_chain.swap_chain,
-                        u64::MAX,
-                        spyder.swap_chain.image_available[spyder.swap_chain.current_image as usize],
-                        vk::Fence::null(),
-                    )
-                    .expect("image acquisition trouble")
-            };
 
-            unsafe {
-                spyder
-                    .logical_device
-                    .wait_for_fences(
-                        &[spyder.swap_chain.may_begin_drawing
-                            [spyder.swap_chain.current_image as usize]],
-                        true,
-                        u64::MAX,
-                    )
-                    .expect("fence-waiting");
-                spyder
-                    .logical_device
-                    .reset_fences(&[spyder.swap_chain.may_begin_drawing
-                        [spyder.swap_chain.current_image as usize]])
-                    .expect("resetting fences");
-            }
+        let semaphores_available =
+            [spyder.swap_chain.image_available[spyder.swap_chain.current_image as usize]];
+        let waiting_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let semaphores_finished =
+            [spyder.swap_chain.rendering_finished[spyder.swap_chain.current_image as usize]];
+        let command_buffers = [spyder.command_buffers[image_index as usize]];
+        let submit_info = [vk::SubmitInfo::builder()
+            .wait_semaphores(&semaphores_available)
+            .wait_dst_stage_mask(&waiting_stages)
+            .command_buffers(&command_buffers)
+            .signal_semaphores(&semaphores_finished)
+            .build()];
 
-            let semaphores_available =
-                [spyder.swap_chain.image_available[spyder.swap_chain.current_image as usize]];
-            let waiting_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-            let semaphores_finished =
-                [spyder.swap_chain.rendering_finished[spyder.swap_chain.current_image as usize]];
-            let command_buffers = [spyder.command_buffers[image_index as usize]];
-            let submit_info = [vk::SubmitInfo::builder()
-                .wait_semaphores(&semaphores_available)
-                .wait_dst_stage_mask(&waiting_stages)
-                .command_buffers(&command_buffers)
-                .signal_semaphores(&semaphores_finished)
-                .build()];
+        unsafe {
+            spyder
+                .logical_device
+                .queue_submit(
+                    spyder.queues.graphics_queue,
+                    &submit_info,
+                    spyder.swap_chain.may_begin_drawing[spyder.swap_chain.current_image as usize],
+                )
+                .expect("queue submission");
+        };
 
-            unsafe {
-                spyder
-                    .logical_device
-                    .queue_submit(
-                        spyder.queues.graphics_queue,
-                        &submit_info,
-                        spyder.swap_chain.may_begin_drawing
-                            [spyder.swap_chain.current_image as usize],
-                    )
-                    .expect("queue submission");
-            };
-
-            let swap_chains = [spyder.swap_chain.swap_chain];
-            let indices = [image_index];
-            let present_info = vk::PresentInfoKHR::builder()
-                .wait_semaphores(&semaphores_finished)
-                .swapchains(&swap_chains)
-                .image_indices(&indices);
-            unsafe {
-                spyder
-                    .swap_chain
-                    .swap_chain_loader
-                    .queue_present(spyder.queues.graphics_queue, &present_info)
-                    .expect("queue presentation");
-            };
-        }
-        _ => {}
-    });
+        let swap_chains = [spyder.swap_chain.swap_chain];
+        let indices = [image_index];
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&semaphores_finished)
+            .swapchains(&swap_chains)
+            .image_indices(&indices);
+        unsafe {
+            spyder
+                .swap_chain
+                .swap_chain_loader
+                .queue_present(spyder.queues.graphics_queue, &present_info)
+                .expect("queue presentation");
+        };
+    }
 }
 
 struct Spyder {
-    window: winit::window::Window,
     entry: ash::Entry,
     instance: ash::Instance,
     debug: std::mem::ManuallyDrop<VulkanDebug>,
@@ -124,7 +126,7 @@ struct Spyder {
 }
 
 impl Spyder {
-    fn new(window: winit::window::Window) -> Self {
+    fn new<T: HasRawWindowHandle + HasRawDisplayHandle>(window: &T) -> Self {
         // Vulkan lib integration.
         let entry: ash::Entry = ash::Entry::linked();
 
@@ -134,7 +136,7 @@ impl Spyder {
         let debug = VulkanDebug::new(&entry, &instance);
 
         // Surface
-        let surface = Surface::new(&entry, &instance, &window);
+        let surface = Surface::new(&entry, &instance, window);
 
         // Device
         let (physical_device, physical_device_properties) =
@@ -218,7 +220,6 @@ impl Spyder {
         );
 
         Self {
-            window,
             entry,
             instance,
             debug: std::mem::ManuallyDrop::new(debug),
@@ -267,7 +268,7 @@ impl Drop for Spyder {
     }
 }
 
-fn init_instance(entry: &ash::Entry, window: &winit::window::Window) -> ash::Instance {
+fn init_instance<T: HasRawDisplayHandle>(entry: &ash::Entry, window: &T) -> ash::Instance {
     // Engine details
     let engine_name = CString::new("Spyder").unwrap();
     let app_name = CString::new("Example").unwrap();
@@ -547,7 +548,11 @@ struct Surface {
 }
 
 impl Surface {
-    fn new(entry: &ash::Entry, instance: &ash::Instance, window: &winit::window::Window) -> Self {
+    fn new<T: HasRawWindowHandle + HasRawDisplayHandle>(
+        entry: &ash::Entry,
+        instance: &ash::Instance,
+        window: &T,
+    ) -> Self {
         let surface = unsafe {
             ash_window::create_surface(
                 entry,
@@ -1092,6 +1097,6 @@ unsafe extern "system" fn vulkan_debug_callback(
     let message = std::ffi::CStr::from_ptr((*p_callback_data).p_message);
     let severity = format!("{:?}", message_severity).to_uppercase();
     let ty = format!("{:?}", message_type).to_lowercase();
-    internal_log!(severity, format!("[{ty}] {message:?}"));
+    internal_log!(severity, "[{ty}] {message:?}");
     vk::FALSE
 }

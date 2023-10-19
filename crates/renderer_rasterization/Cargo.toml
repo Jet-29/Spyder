@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+app_base = { path = "../app_base" }
+event_manager = { path = "../event_manager" }
+resource_manager = { path = "../resource_manager" }
+window = { path = "../window" }
+
 renderer_macros = { path = "../renderer_macros" }
 gpu_memory_manager = { path = "../gpu_memory_manager" }
 logger = { path = "../logger" }

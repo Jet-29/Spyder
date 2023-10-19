@@ -2,10 +2,12 @@ use crate::plugin::Plugin;
 use event_manager::EventManager;
 use logger::{debug, trace};
 use resource_manager::ResourceManager;
+use scheduler::Scheduler;
 
 pub struct App {
     resources: ResourceManager,
     events: EventManager,
+    scheduler: Scheduler,
     run_function: Box<dyn FnOnce(Self)>,
 }
 
@@ -14,6 +16,7 @@ impl Default for App {
         Self {
             resources: ResourceManager::default(),
             events: EventManager::default(),
+            scheduler: Scheduler::default(),
             run_function: Box::new(run_once),
         }
     }
@@ -29,6 +32,10 @@ impl App {
         let mut app = std::mem::take(self);
         let run_function = std::mem::replace(&mut app.run_function, Box::new(run_once));
         run_function(app);
+    }
+
+    pub fn update(&mut self) {
+        self.scheduler.update(&mut self.events, &mut self.resources);
     }
 
     pub fn set_run_function(&mut self, run_function: Box<dyn FnOnce(Self)>) -> &mut Self {
@@ -56,6 +63,14 @@ impl App {
 
     pub fn get_event_manager_mut(&mut self) -> &mut EventManager {
         &mut self.events
+    }
+
+    pub fn get_scheduler(&self) -> &Scheduler {
+        &self.scheduler
+    }
+
+    pub fn get_scheduler_mut(&mut self) -> &mut Scheduler {
+        &mut self.scheduler
     }
 }
 
