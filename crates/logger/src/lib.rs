@@ -1,5 +1,5 @@
-/// THis is a place holder, it will be replaced once a form of plugins is implemented.
-/// These are defined as macros to allow for the removal of the logger at compile time.
+pub struct LoggerPlugin {}
+
 #[macro_export(local_inner_macros)]
 macro_rules! trace {
     ($msg:expr) => {
