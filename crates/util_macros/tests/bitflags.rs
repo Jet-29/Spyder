@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use std::any::Any;
+
     use util_macros::bitflags;
 
     // Use 9 flags to push it over the u8 limit
@@ -17,20 +19,19 @@ mod tests {
     }
 
     #[test]
-    fn bitor() {
-        assert_eq!((TestFlags::F1 | TestFlags::F2).get_value(), 3)
-    }
+    fn test_bitflags() {
+        let mut flags = TestFlags::F1 | TestFlags::F2;
+        assert_eq!(flags.bits(), 3);
 
-    #[test]
-    fn bitor_assign() {
-        let mut my_flags = TestFlags::F3;
-        my_flags |= TestFlags::F4;
-        assert_eq!(my_flags, TestFlags::F3 | TestFlags::F4);
-    }
+        flags |= TestFlags::F3;
+        assert_eq!(flags.bits(), 7);
 
-    #[test]
-    fn bitand() {
-        assert!(!((TestFlags::F2 | TestFlags::F1) & TestFlags::F3));
-        assert!((TestFlags::F7 | TestFlags::F9 | TestFlags::F8) & TestFlags::F7);
+        flags -= TestFlags::F2;
+        assert_eq!(flags.bits(), 5);
+
+        flags ^= TestFlags::F1;
+        assert_eq!(flags.bits(), 4);
+
+        assert_eq!(flags.bits().type_id(), std::any::TypeId::of::<u16>())
     }
 }

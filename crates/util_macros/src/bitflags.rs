@@ -42,7 +42,7 @@ pub fn bitflags(item: TokenStream) -> TokenStream {
         impl #flag_name {
             #(#flags)*
 
-            fn get_value(&self) -> #data_type {
+            fn bits(&self) -> #data_type {
                 self.0
             }
         }
@@ -52,26 +52,71 @@ pub fn bitflags(item: TokenStream) -> TokenStream {
             type Output = Self;
 
             fn bitor(self, rhs: Self) -> Self::Output {
-                Self(self.0.bitor(rhs.0))
+                Self(self.bits() | (rhs.bits()))
             }
         }
 
         // Or - Flags |= FLAG2
         impl std::ops::BitOrAssign for #flag_name {
             fn bitor_assign(&mut self, rhs: Self) {
-                self.0.bitor_assign(rhs.0)
+                *self = Self(self.bits() | rhs.bits())
             }
         }
 
-        // And - Flags & Flag2 results in bool if flag is active
+        // Symmetric difference
+        impl std::ops::BitXor for #flag_name {
+            type Output = Self;
+
+            fn bitxor(self, rhs: Self) -> Self::Output {
+                Self(self.bits() ^ rhs.bits())
+            }
+        }
+
+        // Toggle
+        impl std::ops::BitXorAssign for #flag_name {
+            fn bitxor_assign(&mut self, rhs: Self) {
+                *self = Self(self.bits() ^ rhs.bits())
+            }
+        }
+
+
+        // And
         impl std::ops::BitAnd for #flag_name {
-            type Output = bool;
+            type Output = Self;
 
             fn bitand(self, rhs: Self) -> Self::Output {
-                self.0.bitand(rhs.0) != 0
+                Self(self.bits() & rhs.bits())
             }
         }
 
+        impl std::ops::BitAndAssign for #flag_name {
+            fn bitand_assign(&mut self, rhs: Self) {
+                *self = Self(self.bits() & rhs.bits())
+            }
+        }
+
+        // Difference
+        impl std::ops::Sub for #flag_name {
+            type Output = Self;
+
+            fn sub(self, rhs: Self) -> Self::Output {
+                Self(self.bits() & !rhs.bits())
+            }
+        }
+
+        impl std::ops::SubAssign for #flag_name {
+            fn sub_assign(&mut self, rhs: Self) {
+                *self = Self(self.bits() & !rhs.bits())
+            }
+        }
+
+        impl std::ops::Not for #flag_name {
+            type Output = Self;
+
+            fn not(self) -> Self::Output {
+                Self(!self.bits())
+            }
+        }
 
         // TODO: Improve later.
         impl std::fmt::Debug for #flag_name {
