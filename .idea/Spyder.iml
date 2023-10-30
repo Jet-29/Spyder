@@ -21,7 +21,8 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/event_manager/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/resource_manager/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/crates/scheduler/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/utils_macros/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/util_macros/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/util_macros/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/crates/renderer_macros/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/crates/gpu_memory_manager/target" />
@@ -34,7 +35,7 @@
       <excludeFolder url="file://$MODULE_DIR$/crates/window/target" />
       <excludeFolder url="file://$MODULE_DIR$/crates/event_manager/target" />
       <excludeFolder url="file://$MODULE_DIR$/crates/scheduler/target" />
-      <excludeFolder url="file://$MODULE_DIR$/crates/utils_macros/target" />
+      <excludeFolder url="file://$MODULE_DIR$/crates/util_macros/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

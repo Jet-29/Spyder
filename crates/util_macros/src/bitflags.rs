@@ -20,8 +20,8 @@ pub fn bitflags(item: TokenStream) -> TokenStream {
     let total_variants = enum_data.variants.len();
     let next_power_of_2 = round_to_next_data_size(total_variants, 8);
     assert!(
-        next_power_of_2 > 128,
-        "Bitflags cannot be larger than 128 options currently"
+        next_power_of_2 <= 128,
+        "Bitflags cannot be larger than 128 options currently, You have {total_variants} rounded to {next_power_of_2}"
     );
 
     let data_type = quote::format_ident!("u{next_power_of_2}");
@@ -41,6 +41,10 @@ pub fn bitflags(item: TokenStream) -> TokenStream {
 
         impl #flag_name {
             #(#flags)*
+
+            fn get_value(&self) -> #data_type {
+                self.0
+            }
         }
 
         // Or - FLAG1 | FLAG2
