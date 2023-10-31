@@ -31,7 +31,7 @@ pub fn bitflags(item: TokenStream) -> TokenStream {
     // Generate the flags
     let flags = flag_names.clone().enumerate().map(|(idx, name)| {
         quote! {
-            const #name: #bitflags_name = #bitflags_name(1 << #idx);
+            pub const #name: #bitflags_name = #bitflags_name(1 << #idx);
         }
     });
 
