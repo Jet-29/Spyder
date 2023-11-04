@@ -46,12 +46,12 @@ pub fn bitflags(item: TokenStream) -> TokenStream {
             const FULL: #bitflags_name = #bitflags_name((1 << #total_variants) - 1);
 
             #[inline]
-            pub fn bits(&self) -> #data_type {
+            pub const fn bits(&self) -> #data_type {
                 self.0
             }
 
             #[inline]
-            pub fn from_bits(bits: #data_type) -> Self {
+            pub const fn from_bits(bits: #data_type) -> Self {
                 Self(bits & Self::FULL.bits())
             }
 
