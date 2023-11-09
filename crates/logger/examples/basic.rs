@@ -5,6 +5,8 @@ fn main() {
     trace!("I am a trace {}", 7);
     logger::logger().disable_levels(logger::LogLevel::TRACE | logger::LogLevel::DEBUG);
     debug!("I am a debug");
+    logger::logger().enable_levels(logger::LogLevel::DEBUG);
+    debug!("I am another debug");
     info!("I am an info, {val}");
     warn!("I am a warning");
     error!("I am an error");

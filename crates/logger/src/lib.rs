@@ -10,6 +10,20 @@ pub enum LogLevel {
     FATAL,
 }
 
+impl LogLevel {
+    fn to_coloured_str(&self) -> &str {
+        match *self {
+            Self::TRACE => "\x1b[34mTRACE\x1b[0m",
+            Self::DEBUG => "\x1b[32mDEBUG\x1b[0m",
+            Self::INFO => "\x1b[36mINFO\x1b[0m",
+            Self::WARN => "\x1b[33mWARN\x1b[0m",
+            Self::ERROR => "\x1b[31mERROR\x1b[0m",
+            Self::FATAL => "\x1b[41mFATAL\x1b[0m",
+            _ => unreachable!(),
+        }
+    }
+}
+
 // Default levels
 static mut LOGGER: Logger = Logger::new(LogLevel::from_bits(0b111111));
 
@@ -36,7 +50,7 @@ impl Logger {
 
     pub fn log(&self, level: LogLevel, msg: &str) {
         if self.log_level.intersects(level) {
-            println!("[{}] {}", level, msg); // TODO add colours cause pretty
+            println!("[{}] {}", level.to_coloured_str(), msg);
         }
     }
 }
