@@ -37,7 +37,7 @@ pub fn bitflags(item: TokenStream) -> TokenStream {
 
     // Put it all together.
     let bitflags = quote!(
-        #[derive(Eq, PartialEq)]
+        #[derive(Eq, PartialEq, Copy, Clone, Hash)]
         #flag_vis struct #bitflags_name(#data_type);
 
         impl #bitflags_name {
@@ -70,11 +70,9 @@ pub fn bitflags(item: TokenStream) -> TokenStream {
                 !self.intersection(other).is_empty()
             }
 
-            // TODO: Either add copy or clone, or find better way
             #[inline]
             pub fn contains_all(&self, other: Self) -> bool {
-                let other_bits = other.bits();
-                self.intersection(other).bits() == other_bits
+                self.intersection(other) == other
             }
 
             #[inline]
