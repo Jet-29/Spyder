@@ -1,6 +1,6 @@
 use crate::plugin::Plugin;
 use event_manager::EventManager;
-use logger::{debug, trace};
+use logger::{debug, trace, Logger};
 use resource_manager::ResourceManager;
 use scheduler::Scheduler;
 
@@ -71,6 +71,14 @@ impl App {
 
     pub fn get_scheduler_mut(&mut self) -> &mut Scheduler {
         &mut self.scheduler
+    }
+
+    pub fn get_logger(&self) -> &Logger {
+        logger::logger()
+    }
+
+    pub fn get_logger_mut(&mut self) -> &mut Logger {
+        logger::logger()
     }
 }
 

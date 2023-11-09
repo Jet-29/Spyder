@@ -1095,7 +1095,13 @@ unsafe extern "system" fn vulkan_debug_callback(
     _user_data: *mut std::os::raw::c_void,
 ) -> vk::Bool32 {
     let message = std::ffi::CStr::from_ptr((*p_callback_data).p_message);
-    let severity = format!("{:?}", message_severity).to_uppercase();
+    let severity = match message_severity {
+        vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => logger::LogLevel::TRACE,
+        vk::DebugUtilsMessageSeverityFlagsEXT::INFO => logger::LogLevel::INFO,
+        vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => logger::LogLevel::WARN,
+        vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => logger::LogLevel::ERROR,
+        _ => unreachable!("Unknown log level, {:?}", message_severity),
+    };
     let ty = format!("{:?}", message_type).to_lowercase();
     internal_log!(severity, "[{ty}] {message:?}");
     vk::FALSE

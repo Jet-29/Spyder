@@ -47,48 +47,48 @@ pub fn logger() -> &'static mut Logger {
 
 #[macro_export(local_inner_macros)]
 macro_rules! trace {
-    ($msg:expr) => {
-        internal_log!($crate::LogLevel::TRACE, $msg)
+    ($($arg:tt)*) => {
+        internal_log!($crate::LogLevel::TRACE, $($arg)*)
     };
 }
 
 #[macro_export(local_inner_macros)]
 macro_rules! debug {
-    ($msg:expr) => {
-        internal_log!($crate::LogLevel::DEBUG, $msg)
+    ($($arg:tt)*) => {
+        internal_log!($crate::LogLevel::DEBUG, $($arg)*)
     };
 }
 
 #[macro_export(local_inner_macros)]
 macro_rules! info {
-    ($msg:expr) => {
-        internal_log!($crate::LogLevel::INFO, $msg)
+    ($($arg:tt)*) => {
+        internal_log!($crate::LogLevel::INFO, $($arg)*)
     };
 }
 
 #[macro_export(local_inner_macros)]
 macro_rules! warn {
-    ($msg:expr) => {
-        internal_log!($crate::LogLevel::WARN, $msg)
+    ($($arg:tt)*) => {
+        internal_log!($crate::LogLevel::WARN, $($arg)*)
     };
 }
 
 #[macro_export(local_inner_macros)]
 macro_rules! error {
-    ($msg:expr) => {
-        internal_log!($crate::LogLevel::ERROR, $msg)
+    ($($arg:tt)*) => {
+        internal_log!($crate::LogLevel::ERROR, $($arg)*)
     };
 }
 
 #[macro_export(local_inner_macros)]
 macro_rules! fatal {
-    ($msg:expr) => {
-        internal_log!($crate::LogLevel::FATAL, $msg)
+    ($($arg:tt)*) => {
+        internal_log!($crate::LogLevel::FATAL, $($arg)*)
     };
 }
 #[macro_export]
 macro_rules! internal_log {
-    ($level:expr, $msg:expr) => {
-        $crate::logger().log($level, $msg);
+    ($level:expr, $($arg:tt)*) => {
+        $crate::logger().log($level, format!($($arg)*).as_str());
     };
 }
