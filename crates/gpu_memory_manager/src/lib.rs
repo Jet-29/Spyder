@@ -1,8 +1,3 @@
-pub mod prelude {
-    pub use super::allocator::{Allocation, AllocationCreateInfo, Allocator, AllocatorCreateInfo};
-    pub use super::allocator_types::{AllocationScheme, AllocationType, MemoryLocation};
-}
-
 pub mod allocator;
 pub mod allocator_types;
 

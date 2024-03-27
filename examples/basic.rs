@@ -1,4 +1,4 @@
-use spyder::prelude::*;
+use spyder::{App, RasterizationRendererPlugin, WindowPlugin};
 
 fn main() {
     App::new()

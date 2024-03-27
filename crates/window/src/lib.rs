@@ -1,4 +1,4 @@
-use app_base::prelude::{App, Plugin};
+use app_base::{App, Plugin};
 use logger::trace;
 
 pub struct WindowPlugin;

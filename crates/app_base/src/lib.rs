@@ -1,7 +1,5 @@
-pub mod prelude {
-    pub use super::app::App;
-    pub use super::plugin::Plugin;
-}
+pub mod app;
+pub mod plugin;
 
-mod app;
-mod plugin;
+pub use app::App;
+pub use plugin::Plugin;

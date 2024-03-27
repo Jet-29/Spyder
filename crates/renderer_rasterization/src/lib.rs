@@ -1,12 +1,14 @@
 use std::ffi::CString;
 
-use app_base::prelude::{App, Plugin};
+use app_base::{App, Plugin};
 use ash::vk;
 use event_manager::EventManager;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
-use winit::event::{Event, WindowEvent};
 
-use gpu_memory_manager::prelude::*;
+use gpu_memory_manager::{
+    allocator::{Allocation, AllocationCreateInfo, Allocator, AllocatorCreateInfo},
+    allocator_types::MemoryLocation,
+};
 use logger::internal_log;
 use resource_manager::ResourceManager;
 
