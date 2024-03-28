@@ -1,10 +1,12 @@
 use crate::plugin::Plugin;
+use ecs::World;
 use event_manager::EventManager;
 use logger::{debug, trace, Logger};
 use resource_manager::ResourceManager;
 use scheduler::Scheduler;
 
 pub struct App {
+    world: World,
     resources: ResourceManager,
     events: EventManager,
     scheduler: Scheduler,
@@ -14,6 +16,7 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
+            world: World::default(),
             resources: ResourceManager::default(),
             events: EventManager::default(),
             scheduler: Scheduler::default(),

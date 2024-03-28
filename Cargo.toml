@@ -1,3 +1,4 @@
+workspace = { members = ["crates/ecs"] }
 [package]
 name = "spyder"
 version = "0.1.0"
